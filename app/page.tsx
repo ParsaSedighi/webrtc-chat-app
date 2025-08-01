@@ -8,9 +8,11 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 
-type Message = {
-  from: 'Me' | 'Peer';
-  text: string;
+type Message = { from: 'Me' | 'Peer'; text: string };
+type SignalData = {
+  from: string;
+  type: 'offer' | 'answer' | 'ice-candidate';
+  signal: RTCSessionDescriptionInit | RTCIceCandidate;
 };
 
 export default function HomePage() {
@@ -37,72 +39,7 @@ export default function HomePage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!currentRoom) return;
-
-    // Initialize socket connection
-    fetch('/api/socket').then(() => {
-      const socket = io({ path: '/api/socket' });
-      socketRef.current = socket;
-
-      socket.on('connect', () => {
-        console.log('Socket connected:', socket.id);
-        socket.emit('join-room', currentRoom);
-      });
-
-      socket.on('room-full', () => {
-        toast.error('Room is full', {
-          description: 'Please try a different room ID.',
-        });
-        setCurrentRoom('');
-      });
-
-      socket.on('user-joined', (peerId: string) => {
-        toast.info('A user has joined the room.');
-        console.log('A peer has joined, creating offer for', peerId);
-        createPeerConnection(peerId);
-        createOffer(peerId);
-      });
-
-      socket.on('signal', (data: { from: string; signal: any; type: string }) => {
-        if (!peerConnectionRef.current) {
-          createPeerConnection(data.from);
-        }
-
-        if (data.type === 'offer') {
-          console.log('Received offer from', data.from);
-          peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(data.signal))
-            .then(() => createAnswer(data.from));
-        } else if (data.type === 'answer') {
-          console.log('Received answer from', data.from);
-          peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(data.signal));
-        } else if (data.type === 'ice-candidate') {
-          console.log('Received ICE candidate from', data.from);
-          peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(data.signal));
-        }
-      });
-
-      socket.on('user-left', (peerId: string) => {
-        toast.warning('The other user has left the room.');
-        cleanup();
-      });
-
-      socket.on('disconnect', () => {
-        console.log('Socket disconnected');
-        cleanup();
-      });
-    });
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
-      cleanup();
-    };
-  }, [currentRoom, cleanup]);
-
-  const createPeerConnection = (peerId: string) => {
+  const createPeerConnection = useCallback((peerId: string) => {
     if (peerConnectionRef.current) return;
 
     const pc = new RTCPeerConnection({
@@ -125,9 +62,9 @@ export default function HomePage() {
     };
 
     peerConnectionRef.current = pc;
-  };
+  }, []);
 
-  const createOffer = (peerId: string) => {
+  const createOffer = useCallback((peerId: string) => {
     if (!peerConnectionRef.current) return;
     dataChannelRef.current = peerConnectionRef.current.createDataChannel('messaging');
     setupDataChannel();
@@ -142,9 +79,9 @@ export default function HomePage() {
           });
         }
       });
-  };
+  }, []);
 
-  const createAnswer = (peerId: string) => {
+  const createAnswer = useCallback((peerId: string) => {
     if (!peerConnectionRef.current) return;
     peerConnectionRef.current.createAnswer()
       .then(answer => peerConnectionRef.current?.setLocalDescription(answer))
@@ -157,7 +94,7 @@ export default function HomePage() {
           });
         }
       });
-  };
+  }, []);
 
   const setupDataChannel = () => {
     if (!dataChannelRef.current) return;
@@ -174,6 +111,69 @@ export default function HomePage() {
       setMessages((prev) => [...prev, { from: 'Peer', text: event.data }]);
     };
   };
+
+  useEffect(() => {
+    if (!currentRoom) return;
+
+    fetch('/api/socket').then(() => {
+      const socket = io({ path: '/api/socket' });
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+        console.log('Socket connected:', socket.id);
+        socket.emit('join-room', currentRoom);
+      });
+
+      socket.on('room-full', () => {
+        toast.error('Room is full', { description: 'Please try a different room ID.' });
+        setCurrentRoom('');
+      });
+
+      socket.on('user-joined', (peerId: string) => {
+        toast.info('A user has joined the room.');
+        console.log('A peer has joined, creating offer for', peerId);
+        createPeerConnection(peerId);
+        createOffer(peerId);
+      });
+
+      socket.on('signal', (data: SignalData) => {
+        if (!peerConnectionRef.current) {
+          createPeerConnection(data.from);
+        }
+
+        if (data.type === 'offer') {
+          console.log('Received offer from', data.from);
+          peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(data.signal as RTCSessionDescriptionInit))
+            .then(() => createAnswer(data.from));
+        } else if (data.type === 'answer') {
+          console.log('Received answer from', data.from);
+          peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(data.signal as RTCSessionDescriptionInit));
+        } else if (data.type === 'ice-candidate') {
+          console.log('Received ICE candidate from', data.from);
+          peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(data.signal as RTCIceCandidate));
+        }
+      });
+
+      // Prefix 'peerId' with '_' to fix the unused variable warning
+      socket.on('user-left', (_peerId: string) => {
+        toast.warning('The other user has left the room.');
+        cleanup();
+      });
+
+      socket.on('disconnect', () => {
+        console.log('Socket disconnected');
+        cleanup();
+      });
+    });
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      cleanup();
+    };
+  }, [currentRoom, cleanup, createPeerConnection, createOffer, createAnswer]);
 
   const handleJoinRoom = () => {
     if (room) {

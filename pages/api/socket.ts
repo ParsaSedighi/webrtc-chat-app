@@ -1,8 +1,6 @@
-// pages/api/socket.ts
 import { Server, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import { NextApiRequest, NextApiResponse } from 'next';
-
 
 type NextApiResponseWithSocket = NextApiResponse & {
     socket: {
@@ -11,6 +9,12 @@ type NextApiResponseWithSocket = NextApiResponse & {
         };
     };
 };
+
+interface SignalPayload {
+    target: string;
+    signal: unknown;
+    type: string;
+}
 
 const ioHandler = (req: NextApiRequest, res: NextApiResponseWithSocket) => {
     if (!res.socket.server.io) {
@@ -27,7 +31,6 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseWithSocket) => {
                 const { rooms } = io.sockets.adapter;
                 const room = rooms.get(roomId);
 
-                // A room can have at most 2 clients
                 if (room && room.size === 2) {
                     socket.emit('room-full');
                     return;
@@ -35,11 +38,10 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseWithSocket) => {
 
                 socket.join(roomId);
                 console.log(`User ${socket.id} joined room ${roomId}`);
-                // Notify the other user in the room
                 socket.to(roomId).emit('user-joined', socket.id);
             });
 
-            socket.on('signal', (payload: { target: string; signal: any; type: string }) => {
+            socket.on('signal', (payload: SignalPayload) => {
                 console.log(`Relaying signal of type ${payload.type} from ${socket.id} to ${payload.target}`);
                 io.to(payload.target).emit('signal', {
                     from: socket.id,
