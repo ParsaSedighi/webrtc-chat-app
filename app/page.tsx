@@ -1,103 +1,242 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from 'sonner';
+
+type Message = {
+  from: 'Me' | 'Peer';
+  text: string;
+};
+
+export default function HomePage() {
+  const [room, setRoom] = useState('');
+  const [currentRoom, setCurrentRoom] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+
+  const socketRef = useRef<Socket | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const dataChannelRef = useRef<RTCDataChannel | null>(null);
+
+  const cleanup = useCallback(() => {
+    console.log('Cleaning up connections.');
+    setIsConnected(false);
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    if (dataChannelRef.current) {
+      dataChannelRef.current.close();
+      dataChannelRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentRoom) return;
+
+    // Initialize socket connection
+    fetch('/api/socket').then(() => {
+      const socket = io({ path: '/api/socket' });
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+        console.log('Socket connected:', socket.id);
+        socket.emit('join-room', currentRoom);
+      });
+
+      socket.on('room-full', () => {
+        toast.error('Room is full', {
+          description: 'Please try a different room ID.',
+        });
+        setCurrentRoom('');
+      });
+
+      socket.on('user-joined', (peerId: string) => {
+        toast.info('A user has joined the room.');
+        console.log('A peer has joined, creating offer for', peerId);
+        createPeerConnection(peerId);
+        createOffer(peerId);
+      });
+
+      socket.on('signal', (data: { from: string; signal: any; type: string }) => {
+        if (!peerConnectionRef.current) {
+          createPeerConnection(data.from);
+        }
+
+        if (data.type === 'offer') {
+          console.log('Received offer from', data.from);
+          peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(data.signal))
+            .then(() => createAnswer(data.from));
+        } else if (data.type === 'answer') {
+          console.log('Received answer from', data.from);
+          peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(data.signal));
+        } else if (data.type === 'ice-candidate') {
+          console.log('Received ICE candidate from', data.from);
+          peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(data.signal));
+        }
+      });
+
+      socket.on('user-left', (peerId: string) => {
+        toast.warning('The other user has left the room.');
+        cleanup();
+      });
+
+      socket.on('disconnect', () => {
+        console.log('Socket disconnected');
+        cleanup();
+      });
+    });
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      cleanup();
+    };
+  }, [currentRoom, cleanup]);
+
+  const createPeerConnection = (peerId: string) => {
+    if (peerConnectionRef.current) return;
+
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && socketRef.current) {
+        socketRef.current.emit('signal', {
+          target: peerId,
+          signal: event.candidate,
+          type: 'ice-candidate',
+        });
+      }
+    };
+
+    pc.ondatachannel = (event) => {
+      dataChannelRef.current = event.channel;
+      setupDataChannel();
+    };
+
+    peerConnectionRef.current = pc;
+  };
+
+  const createOffer = (peerId: string) => {
+    if (!peerConnectionRef.current) return;
+    dataChannelRef.current = peerConnectionRef.current.createDataChannel('messaging');
+    setupDataChannel();
+    peerConnectionRef.current.createOffer()
+      .then(offer => peerConnectionRef.current?.setLocalDescription(offer))
+      .then(() => {
+        if (socketRef.current && peerConnectionRef.current?.localDescription) {
+          socketRef.current.emit('signal', {
+            target: peerId,
+            signal: peerConnectionRef.current.localDescription,
+            type: 'offer',
+          });
+        }
+      });
+  };
+
+  const createAnswer = (peerId: string) => {
+    if (!peerConnectionRef.current) return;
+    peerConnectionRef.current.createAnswer()
+      .then(answer => peerConnectionRef.current?.setLocalDescription(answer))
+      .then(() => {
+        if (socketRef.current && peerConnectionRef.current?.localDescription) {
+          socketRef.current.emit('signal', {
+            target: peerId,
+            signal: peerConnectionRef.current.localDescription,
+            type: 'answer',
+          });
+        }
+      });
+  };
+
+  const setupDataChannel = () => {
+    if (!dataChannelRef.current) return;
+    dataChannelRef.current.onopen = () => {
+      console.log('✅ Data channel open');
+      setIsConnected(true);
+      toast.success('Connected!', { description: 'You can now send messages.' });
+    };
+    dataChannelRef.current.onclose = () => {
+      console.log('❌ Data channel closed');
+      cleanup();
+    };
+    dataChannelRef.current.onmessage = (event) => {
+      setMessages((prev) => [...prev, { from: 'Peer', text: event.data }]);
+    };
+  };
+
+  const handleJoinRoom = () => {
+    if (room) {
+      setCurrentRoom(room);
+    }
+  };
+
+  const handleSendMessage = () => {
+    if (newMessage.trim() && dataChannelRef.current?.readyState === 'open') {
+      dataChannelRef.current.send(newMessage);
+      setMessages((prev) => [...prev, { from: 'Me', text: newMessage }]);
+      setNewMessage('');
+    }
+  };
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+    <div className="flex items-center justify-center min-h-screen bg-background">
+      <Card className="w-full max-w-2xl">
+        <CardHeader>
+          <CardTitle className="text-center text-2xl">⚡️ WebRTC + WebSocket Messenger</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!currentRoom ? (
+            <div className="flex w-full max-w-sm items-center space-x-2 mx-auto">
+              <Input
+                type="text"
+                value={room}
+                onChange={(e) => setRoom(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom()}
+                placeholder="Enter Room ID"
+              />
+              <Button onClick={handleJoinRoom}>Join Room</Button>
+            </div>
+          ) : (
+            <div>
+              <div className="text-center mb-4">
+                <p>Room: <span className="font-bold">{currentRoom}</span></p>
+                <p>Status: <span className={isConnected ? "text-green-500" : "text-red-500"}>{isConnected ? 'Connected' : 'Disconnected'}</span></p>
+              </div>
+              <ScrollArea className="h-96 w-full rounded-md border p-4 mb-4">
+                {messages.map((msg, index) => (
+                  <div key={index} className={`flex ${msg.from === 'Me' ? 'justify-end' : 'justify-start'} mb-2`}>
+                    <div className={`rounded-lg px-4 py-2 ${msg.from === 'Me' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+              </ScrollArea>
+              <div className="flex w-full items-center space-x-2">
+                <Input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  placeholder="Type a message..."
+                  disabled={!isConnected}
+                />
+                <Button onClick={handleSendMessage} disabled={!isConnected}>Send</Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

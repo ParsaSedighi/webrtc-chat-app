@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ⚡️ Real-Time P2P Chat Application
+
+![Tech Stack](https://img.shields.io/badge/tech-Next.js%20%7C%20WebRTC%20%7C%20Socket.IO-blue)
+
+A high-performance, real-time messaging application that enables private, peer-to-peer (P2P) communication directly between browsers. This project uses WebRTC for secure data channels and a WebSocket-based signaling server to orchestrate connections.
+
+---
+
+## Key Features
+
+- **Real-Time Messaging:** Instantaneous, bi-directional communication using WebRTC's `RTCDataChannel`.
+- **Private Chat Rooms:** Users can create or join unique rooms for private, one-on-one conversations.
+- **Peer-to-Peer Connection:** After the initial handshake, all messages are sent directly between users, ensuring low latency and enhanced privacy.
+- **Efficient Signaling:** A lightweight WebSocket (Socket.IO) server handles the signaling process required to establish the WebRTC connection.
+- **Modern & Responsive UI:** Built with **shadcn/ui** and **Tailwind CSS** for a clean and responsive user experience.
+- **User Presence:** Real-time notifications for users joining or leaving a room.
+
+---
+
+## Tech Stack
+
+- **Framework:** **Next.js 15** (App Router)
+- **Language:** **TypeScript**
+- **Frontend:** **React**
+- **Styling:** **Tailwind CSS**
+- **UI Components:** **shadcn/ui**
+- **Signaling Server:** **Socket.IO**
+- **P2P Communication:** **WebRTC** (`RTCPeerConnection`, `RTCDataChannel`)
+
+---
 
 ## Getting Started
 
-First, run the development server:
+To run this project locally, follow these steps:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1.  **Clone the repository:**
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+    ```bash
+    git clone [https://github.com/ParsaSedighi/webrtc-chat-app.git](https://github.com/your-username/your-repo-name.git)
+    ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+2.  **Navigate to the project directory:**
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+    ```bash
+    cd webrtc-chat-app
+    ```
 
-## Learn More
+3.  **Install dependencies:**
 
-To learn more about Next.js, take a look at the following resources:
+    ```bash
+    npm install
+    ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4.  **Run the development server:**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+    ```bash
+    npm run dev
+    ```
 
-## Deploy on Vercel
+5.  **Test the application:**
+    Open [http://localhost:3000](http://localhost:3000) in two separate browser tabs or windows. Enter the same Room ID in both tabs to connect and start chatting.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
