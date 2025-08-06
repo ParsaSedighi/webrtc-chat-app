@@ -51,13 +51,20 @@ To run this project locally, follow these steps:
     npm install
     ```
 
-4.  **Run the development server:**
+4. **Add TURN server credentials to .env file:**
+
+    ```
+    NEXT_PUBLIC_TURN_USERNAME=your-turn-username
+    NEXT_PUBLIC_TURN_CREDENTIAL=your-turn-credentail
+    ```
+
+6.  **Run the development server:**
 
     ```bash
     npm run dev
     ```
 
-5.  **Test the application:**
+7.  **Test the application:**
     Open [http://localhost:3000](http://localhost:3000) in two separate browser tabs or windows. Enter the same Room ID in both tabs to connect and start chatting.
 
 ---
