@@ -39,39 +39,13 @@ export default function HomePage() {
     }
   }, []);
 
-  const createPeerConnection = useCallback((peerId: string) => {
+  const createPeerConnection = useCallback(async (peerId: string) => {
     if (peerConnectionRef.current) return;
 
+    const res = await fetch('/api/ice-config');
+    const { iceServers } = await res.json();
 
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        {
-          urls: 'stun:stun.l.google.com:19302'
-        },
-        {
-          urls: "stun:stun.relay.metered.ca:80",
-        },
-        {
-          urls: "turn:global.relay.metered.ca:80",
-          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
-          credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
-        },
-        {
-          urls: "turn:global.relay.metered.ca:80?transport=tcp",
-          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
-          credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
-        },
-        {
-          urls: "turn:global.relay.metered.ca:443",
-          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
-          credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
-        },
-        {
-          urls: "turns:global.relay.metered.ca:443?transport=tcp",
-          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
-          credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
-        },],
-    });
+    const pc = new RTCPeerConnection({ iceServers });
 
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current) {
