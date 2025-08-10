@@ -1,5 +1,6 @@
 'use client';
 
+// TODO: convert this page to server component
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Button } from '@/components/ui/button';
@@ -39,13 +40,40 @@ export default function HomePage() {
     }
   }, []);
 
-  const createPeerConnection = useCallback(async (peerId: string) => {
+  const createPeerConnection = useCallback((peerId: string) => {
     if (peerConnectionRef.current) return;
 
-    const res = await fetch('/api/ice-config');
-    const { iceServers } = await res.json();
-
-    const pc = new RTCPeerConnection({ iceServers });
+    // TODO: use ephemeral credentials for TURN server secrets
+    // This method is using NEXT_PUBLIC and is exposed to the client hence it is not safe!
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        {
+          urls: 'stun:stun.l.google.com:19302'
+        },
+        {
+          urls: "stun:stun.relay.metered.ca:80",
+        },
+        {
+          urls: "turn:global.relay.metered.ca:80",
+          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+          credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
+        },
+        {
+          urls: "turn:global.relay.metered.ca:80?transport=tcp",
+          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+          credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
+        },
+        {
+          urls: "turn:global.relay.metered.ca:443",
+          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+          credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
+        },
+        {
+          urls: "turns:global.relay.metered.ca:443?transport=tcp",
+          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+          credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
+        },],
+    });
 
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current) {

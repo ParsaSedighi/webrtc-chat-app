@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+// These credentials are easier to leak, DO NOT USE!
 export async function GET() {
     return NextResponse.json({
         iceServers: [
